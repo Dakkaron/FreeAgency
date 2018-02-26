@@ -7,7 +7,7 @@ Beispieltext\n\
 		*finish\n\
 	#Wahl 2\n\
 		${testvar}, du hast Wahl 2 ausgewählt\n\
-		*finish';
+		*finish\n';
 
 var tokenList = [];
 var indentation = "";
@@ -41,7 +41,7 @@ var lines = scene.split("\n");
 lines.forEach((element, index, array) => {
     try {
         var matchCommand = element.match("([\t ]*)[*]([^ ]*)(?: (.*))?");
-        var matchChoiceTarget = element.match("([\t ]*)[#].*");
+        var matchChoiceTarget = element.match("([\t ]*)[#](.*)");
         if (matchCommand) { // Command
             tokenList.push({
                     "type":"COMMAND",
@@ -54,8 +54,11 @@ lines.forEach((element, index, array) => {
             tokenList.push({
                     "type":"CHOICETARGET","target":matchChoiceTarget[2],
                     "indent":checkIndent(matchChoiceTarget[1]),
+					"choice":matchChoiceTarget[3],
                     "linenr":index+1
                 });
+		} else if (element.trim().length == 0) {
+			// ignore empty lines
         } else { // Plain text
             tokenList.push({
                     "type":"PLAINTEXT",
@@ -93,29 +96,39 @@ function addParseLevel(cause) {
 }
 
 function printableParsedTree(node) {
-    var printableParsedTree = {
-        };
-    
+    if ((typeof node["parent"])==="undefined") {
+		return node;
+	}
+	var pnode = {
+			"cause": node.cause,
+			"items": []
+		};
+	node.items.forEach((element, index, array) => {
+			pnode.items.push(printableParsedTree(element));
+		});
+	return pnode;
 }
 
 tokenList.forEach((element, index, array) => {
     if (element.indent > currentIndent) {
         throw "Line "+element.linenr+": Syntax Error: wrong indentation level!"
-    } else if (element.indent <= currentIndent) {
+    } else if (element.indent < currentIndent) {
         for (i=currentIndent; i>element.indent; i--) {
             currentParseLevel = currentParseLevel.parent;
         }
+        currentIndent = element.indent;
     }
     if (element.type == "PLAINTEXT") {
         currentParseLevel.items.push(element);
     } else if (element.type == "COMMAND") {
-        if (element.command == "set") {
-        } else if (element.command == "choice") {
+        if (element.command == "choice") {
             addParseLevel(element);
-        }
+        } else {
+			currentParseLevel.items.push(element);
+		}
     } else if (element.type == "CHOICETARGET") {
         addParseLevel(element);
     }
 });
 
-$("#parsedTreeDiv").html(JSON.stringify(parsedTree, null, 4));
+$("#parsedTreeDiv").html(JSON.stringify(printableParsedTree(parsedTree), null, 4));
