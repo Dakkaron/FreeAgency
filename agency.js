@@ -40,30 +40,82 @@ function checkIndent(indent) {
 var lines = scene.split("\n");
 lines.forEach((element, index, array) => {
     try {
-        var matchCommand = element.match("([\t ]*)[*]([^ ]*)(:? (.*))?");
+        var matchCommand = element.match("([\t ]*)[*]([^ ]*)(?: (.*))?");
         var matchChoiceTarget = element.match("([\t ]*)[#].*");
         if (matchCommand) { // Command
             tokenList.push({
                     "type":"COMMAND",
                     "command":matchCommand[2],
                     "params":matchCommand[3],
-                    "indent":checkIndent(matchCommand[1])
+                    "indent":checkIndent(matchCommand[1]),
+                    "linenr":index+1
                 });
         } else if (matchChoiceTarget) { // Choice target
             tokenList.push({
                     "type":"CHOICETARGET","target":matchChoiceTarget[2],
                     "indent":checkIndent(matchChoiceTarget[1]),
+                    "linenr":index+1
                 });
         } else { // Plain text
             tokenList.push({
                     "type":"PLAINTEXT",
                     "text": element,
-                    "indent":checkIndent(element.match("([\t ]*)")[1])
+                    "indent":checkIndent(element.match("([\t ]*)")[1]),
+                    "linenr":index+1
                 });
         }
     } catch(err) {
-        throw "Line "+index+": "+err;
+        throw "Line "+(index+1)+": "+err;
     }
 });
 
-tokenList;
+var prettyTokens = [];
+tokenList.forEach((element, index, array) => {
+    prettyTokens.push(JSON.stringify(element, null, 4));
+});
+
+$("#tokenListDiv").html(prettyTokens.join("<br><br>"));
+
+var parsedTree = {"parent":null, "cause":null, "items":[]};
+var currentParseLevel = parsedTree;
+var currentIndent = 0;
+var i=0;
+
+function addParseLevel(cause) {
+    var newParseLevel = {
+            "parent": currentParseLevel,
+            "cause": cause,
+            "items": []
+        };
+    currentParseLevel.items.push(newParseLevel);
+    currentParseLevel = newParseLevel;
+    currentIndent += 1;
+}
+
+function printableParsedTree(node) {
+    var printableParsedTree = {
+        };
+    
+}
+
+tokenList.forEach((element, index, array) => {
+    if (element.indent > currentIndent) {
+        throw "Line "+element.linenr+": Syntax Error: wrong indentation level!"
+    } else if (element.indent <= currentIndent) {
+        for (i=currentIndent; i>element.indent; i--) {
+            currentParseLevel = currentParseLevel.parent;
+        }
+    }
+    if (element.type == "PLAINTEXT") {
+        currentParseLevel.items.push(element);
+    } else if (element.type == "COMMAND") {
+        if (element.command == "set") {
+        } else if (element.command == "choice") {
+            addParseLevel(element);
+        }
+    } else if (element.type == "CHOICETARGET") {
+        addParseLevel(element);
+    }
+});
+
+$("#parsedTreeDiv").html(JSON.stringify(parsedTree, null, 4));
