@@ -1,6 +1,6 @@
 var sceneData = 'Das ist ein\n\
 Beispieltext\n\
-*create testvar\n\
+*create testvar "TEST"\n\
 *set testvar "Hallo"\n\
 *choice\n\
 	#Wahl 1\n\
@@ -230,13 +230,43 @@ function renderDelegator(renderStack, html) {
 			return renderCommandChoice(node, renderStack, html);
 		} else if (node.command == "finish") {
 			return [false, renderStack, html];
+		} else if (node.command == "create") {
+			var cmdMatch = node.params.match("([^ \t]+) +(.+)");
+			if (!cmdMatch) {
+				throw "Line "+node.linenr+": Syntax Error: *create needs to have a variable name and a value!"
+			}
+			var varname = cmdMatch[1];
+			var value = cmdMatch[2];
+			if (varname in globals) {
+				throw "Line "+node.linenr+": Runtime Error: variable with name "+varname+" already created!"
+			} else {
+				globals[varname] = value;
+				console.log("Created variable "+varname+" with value "+value);
+				debugger;
+			}
+		} else if (node.command == "set") {
+			var cmdMatch = node.params.match("([^ \t]+) +(.+)");
+			if (!cmdMatch) {
+				throw "Line "+node.linenr+": Syntax Error: *set needs to have a variable name and a value!"
+			}
+			var varname = cmdMatch[1];
+			var value = cmdMatch[2];
+			if (!(varname in globals)) {
+				throw "Line "+node.linenr+": Runtime Error: no variable with name "+varname+" exists! Create it first using *create"
+			} else {
+				globals[varname] = value;
+			}
 		}
 		// Todo: other commands
 	} else if (node.type == "CHOICETARGET") {
 		// Todo: handle error, should never happen!
 	} else if (node.type == "PLAINTEXT") {
 		[keepRendering, renderStack] = incrementRenderStack(renderStack);
-		return [keepRendering, renderStack, html + "\n" + node.text];
+		var text = node.text;
+		for (var v in globals) {
+			text = text.replace("${"+v+"}", globals[v]);
+		}
+		return [keepRendering, renderStack, html + "\n" + text];
 	}
 	[keepRendering, renderStack] = incrementRenderStack(renderStack); // Todo: remove this dummy fall-through
 	return [keepRendering, renderStack, html]; // Todo: remove this dummy fall-through
