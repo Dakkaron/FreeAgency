@@ -120,14 +120,14 @@ function parseTokens(tokenList) {
 			currentParseLevel.items.push(element);
 		} else if (element.type == "COMMAND") {
 			if (element.command == "choice") {
+				element.choiceCount = 0;
 				addParseLevel(element);
-				choiceId = 0;
 			} else {
 				currentParseLevel.items.push(element);
 			}
 		} else if (element.type == "CHOICETARGET") {
-			element.choiceId = choiceId;
-			choiceId += 1;
+			element.choiceId = currentParseLevel.choiceCount;
+			currentParseLevel.choiceCount += 1;
 			addParseLevel(element);
 		}
 	});
@@ -161,6 +161,10 @@ function choiceNextButtonPressed() {
 	choiceSelected = $('input[name=choiceRadio]:checked', '#choiceform').val();
 	[renderStack, renderedHtml] = render(renderStack)
 	$("#renderedOutputDiv").html(renderedHtml);
+}
+
+function finishButtonPressed() {
+	//Todo: next chapter
 }
 
 function renderCommandChoice(node, renderStack, html) {
@@ -229,6 +233,7 @@ function renderDelegator(renderStack, html) {
 		if (node.command == "choice") {
 			return renderCommandChoice(node, renderStack, html);
 		} else if (node.command == "finish") {
+			html += '<br><div><button onclick="finishButtonPressed()" name="finishbutton" type="button" class="btn btn-primary">Next Chapter</button></div>\n';
 			return [false, renderStack, html];
 		} else if (node.command == "create") {
 			var cmdMatch = node.params.match("([^ \t]+) +(.+)");
@@ -242,7 +247,6 @@ function renderDelegator(renderStack, html) {
 			} else {
 				globals[varname] = value;
 				console.log("Created variable "+varname+" with value "+value);
-				debugger;
 			}
 		} else if (node.command == "set") {
 			var cmdMatch = node.params.match("([^ \t]+) +(.+)");
@@ -281,6 +285,7 @@ function render(renderStack) {
 	return [renderStack, html];
 }
 
+$("#sourceCodeDiv").html(sceneData.replace(/\n/g,"<br>\n").replace(/\t/g,"\xa0".repeat(8)));
 var tokenList = tokenize(sceneData);
 $("#tokenListDiv").html(prettyPrintTokens(tokenList).join("<br><br>"));
 var parsedTree = parseTokens(tokenList);
