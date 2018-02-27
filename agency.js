@@ -114,6 +114,7 @@ function parseTokens(tokenList) {
 			currentParseLevel.items.push(element);
 		} else if (element.type == "COMMAND") {
 			if (element.command == "choice") {
+				element.chosen = null;
 				addParseLevel(element);
 			} else {
 				currentParseLevel.items.push(element);
@@ -137,6 +138,64 @@ function printableParsedTree(node) {
 	node.items.forEach((element, index, array) => {
 			pnode.items.push(printableParsedTree(element));
 		});
+	return pnode;
+}
+
+var renderStack = {"node":parsedTree,"pointer":0,"parent":null};
+
+function renderCommandChoice(node, renderStack, html) {
+	if (node.chosen == null) { // render options
+		
+	} else { // render content of chosen option
+	}
+}
+
+function incrementRenderStack(renderStack) {
+	/*
+	Increases renderStack.pointer.
+	Returns [keepRendering, renderStack].
+	If rendering of renderStack.node is finished, return
+	renderStack.parent as renderStack. If renderStack.parent==null,
+	return false as keepRendering (true otherwise) and renderStack as renderStack.
+	*/
+	renderStack.pointer += 1;
+	if (renderStack.pointer >= renderStack.node.items.length) {
+		if (renderStack.parent == null) {
+			return [false, renderStack];
+		} else {
+			return [true, renderStack.parent];
+		}
+	}
+	return [true, renderStack];
+}
+
+function renderDelegator(renderStack, html) {
+	var node = null;
+	if (renderStack.pointer === -1) {
+		node = renderStack.node;
+	} else {
+		node = renderStack.node.items[renderStack.pointer];
+	}
+	if (node.type == "COMMAND") {
+		if (node.type == "choice") {
+			return renderCommandChoice(node, renderStack, html);
+		}
+		// Todo: other commands
+	} else if (node.type == "CHOICETARGET") {
+		// Todo: handle error, should never happen!
+	} else if (node.type == "PLAINTEXT") {
+		[keepRendering, renderStack] = incrementRenderStack(renderStack);
+		return [keepRendering, renderStack, html + "\n" + node.text];
+	}
+	// Todo: handle unknown commands
+}
+
+function render(parsedTree, renderStack) {
+	var html = "";
+	var keepRendering = true;
+	while (keepRendering) {
+		[keepRendering, renderStack, html] = renderDelegator(renderStack, html);
+	}
 	return pnode;
 }
 
