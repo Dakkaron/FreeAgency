@@ -1,10 +1,13 @@
 var sceneData = 'Das ist ein\n\
 Beispieltext\n\
+*create testvar\n\
 *set testvar "Hallo"\n\
 *choice\n\
 	#Wahl 1\n\
-		${testvar}, du hast Wahl 1 ausgewählt\n\
+		${testvar}, du \n\
+		hast Wahl 1 ausgewählt\n\
 		*finish\n\
+		Das hier sollte nicht angezeigt werden\n\
 	#Wahl 2\n\
 		${testvar}, du hast Wahl 2 ausgewählt\n\
 		*finish\n';
@@ -63,7 +66,7 @@ function tokenize(scene) {
 			} else { // Plain text
 				tokenList.push({
 						"type":"PLAINTEXT",
-						"text": element,
+						"text": element.trimLeft(),
 						"indent":_checkIndent(element.match("([\t ]*)")[1]),
 						"linenr":index+1
 					});
@@ -85,17 +88,20 @@ function prettyPrintTokens(tokenList) {
 }
 
 function parseTokens(tokenList) {
-	var parsedTree = {"parent":null, "cause":null, "items":[]};
+	var parsedTree = {"parent":null, "items":[]};
 	var currentParseLevel = parsedTree;
 	var currentIndent = 0;
 	var i=0;
+	var choiceId=0;
 
 	function addParseLevel(cause) {
 		var newParseLevel = {
 				"parent": currentParseLevel,
-				"cause": cause,
 				"items": []
 			};
+		for (var x in cause) {
+			newParseLevel[x] = cause[x];
+		};
 		currentParseLevel.items.push(newParseLevel);
 		currentParseLevel = newParseLevel;
 		currentIndent += 1;
@@ -114,12 +120,14 @@ function parseTokens(tokenList) {
 			currentParseLevel.items.push(element);
 		} else if (element.type == "COMMAND") {
 			if (element.command == "choice") {
-				element.chosen = null;
 				addParseLevel(element);
+				choiceId = 0;
 			} else {
 				currentParseLevel.items.push(element);
 			}
 		} else if (element.type == "CHOICETARGET") {
+			element.choiceId = choiceId;
+			choiceId += 1;
 			addParseLevel(element);
 		}
 	});
@@ -132,8 +140,12 @@ function printableParsedTree(node) {
 		return node;
 	}
 	var pnode = {
-			"cause": node.cause,
 			"items": []
+		};
+	for (var x in node) {
+			if (x !== "parent" && x !== "items") {
+				pnode[x] = node[x];
+			}
 		};
 	node.items.forEach((element, index, array) => {
 			pnode.items.push(printableParsedTree(element));
@@ -141,13 +153,50 @@ function printableParsedTree(node) {
 	return pnode;
 }
 
-var renderStack = {"node":parsedTree,"pointer":0,"parent":null};
+var choiceSelected = null;
+var renderStack = null;
+var renderedHtml = null;
+var globals = {};
+function choiceNextButtonPressed() {
+	choiceSelected = $('input[name=choiceRadio]:checked', '#choiceform').val();
+	[renderStack, renderedHtml] = render(renderStack)
+	$("#renderedOutputDiv").html(renderedHtml);
+}
 
 function renderCommandChoice(node, renderStack, html) {
-	if (node.chosen == null) { // render options
-		
+	var newHtml = "";
+	if (choiceSelected == null) { // render options
+		var first = true;
+		node.items.forEach((element, index, array) => {
+			if (element.type == "CHOICETARGET") {
+				newHtml += '<div class="radio"><label><input type="radio" name="choiceRadio" value="'+element.choiceId+'"' + (first ? "checked":"") + '>'+element.target+"</label></div>\n";
+				first = false;
+			}
+			// Todo: handle ifs
+		});
+		html += '<form id="choiceform">\n'+newHtml+'</form><button onclick="choiceNextButtonPressed()" name="nextbutton" type="button" class="btn btn-primary">Next</button>\n';
+		choiceSelected = null;
+		return [false, renderStack, html];
 	} else { // render content of chosen option
+		var selectedChoice = null;
+		node.items.forEach((element, index, array) => {
+			if (selectedChoice==null && element.type == "CHOICETARGET") {
+				if (choiceSelected == element.choiceId) {
+					selectedChoice = element;
+				}
+			}
+			// Todo: handle ifs
+		});
+		if (selectedChoice !== null) {
+			renderStack = {"node":selectedChoice, "pointer":0, "parent":renderStack};
+			[renderStack, html] = render(renderStack);
+			return [false, renderStack, html];
+		} else {
+			throw "Line "+element.linenr+": No choice option selected!";
+		}
 	}
+	[keepRendering, renderStack] = incrementRenderStack(renderStack); // Todo: remove this dummy fall-through
+	return [keepRendering, renderStack, html]; // Todo: remove this dummy fall-through
 }
 
 function incrementRenderStack(renderStack) {
@@ -163,7 +212,7 @@ function incrementRenderStack(renderStack) {
 		if (renderStack.parent == null) {
 			return [false, renderStack];
 		} else {
-			return [true, renderStack.parent];
+			return incrementRenderStack(renderStack.parent);
 		}
 	}
 	return [true, renderStack];
@@ -177,8 +226,10 @@ function renderDelegator(renderStack, html) {
 		node = renderStack.node.items[renderStack.pointer];
 	}
 	if (node.type == "COMMAND") {
-		if (node.type == "choice") {
+		if (node.command == "choice") {
 			return renderCommandChoice(node, renderStack, html);
+		} else if (node.command == "finish") {
+			return [false, renderStack, html];
 		}
 		// Todo: other commands
 	} else if (node.type == "CHOICETARGET") {
@@ -187,19 +238,23 @@ function renderDelegator(renderStack, html) {
 		[keepRendering, renderStack] = incrementRenderStack(renderStack);
 		return [keepRendering, renderStack, html + "\n" + node.text];
 	}
-	// Todo: handle unknown commands
+	[keepRendering, renderStack] = incrementRenderStack(renderStack); // Todo: remove this dummy fall-through
+	return [keepRendering, renderStack, html]; // Todo: remove this dummy fall-through
 }
 
-function render(parsedTree, renderStack) {
+function render(renderStack) {
 	var html = "";
 	var keepRendering = true;
 	while (keepRendering) {
 		[keepRendering, renderStack, html] = renderDelegator(renderStack, html);
 	}
-	return pnode;
+	return [renderStack, html];
 }
 
 var tokenList = tokenize(sceneData);
 $("#tokenListDiv").html(prettyPrintTokens(tokenList).join("<br><br>"));
 var parsedTree = parseTokens(tokenList);
+renderStack = {"node":parsedTree,"pointer":0,"parent":null};
 $("#parsedTreeDiv").html(JSON.stringify(printableParsedTree(parsedTree), null, 4));
+[renderStack, renderedHtml] = render(renderStack)
+$("#renderedOutputDiv").html(renderedHtml);
