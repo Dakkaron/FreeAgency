@@ -1,7 +1,7 @@
 ﻿var sceneData = 'Das ist ein\n\
 Beispieltext\n\
 *create testvar "TEST"\n\
-*set testvar 7+3*4\n\
+*set testvar 50 %+ 20\n\
 *choice\n\
 	#Wahl 1\n\
 		${testvar}, du \n\
@@ -51,6 +51,10 @@ Beispieltext\n\
     Perhaps in time you can return to restore order to this fair land.\n\
     *finish\n\
 ';*/
+
+//Fairmath polyfills
+Number.prototype.fairAdd = function(val) {return this + (100-this)*(val/100);};
+Number.prototype.fairSub = function(val) {return this - this*(val/100);};
 
 function tokenize(scene) {
 	var tokenList = [];
@@ -229,7 +233,7 @@ function parseCalc(varname, calc) {
 				}
 			}
 		}
-		var tokens = ("("+calc+")").split(/([-+*\/()])/);
+		var tokens = ("("+calc+")").split(/([-+*\/()]|(?:%[-+]))/);
 		for (var v in globals) {
 			if (tokens.indexOf(v)>-1) {
 				if (typeof(globals[v])!=='number') {
@@ -244,13 +248,34 @@ function parseCalc(varname, calc) {
 			}
 		}
 		//var result = recursiveCalc(tokens); // Todo: own math implementation
-		var ALLOWED_TOKENS = ["+","-","*","/","(",")"];
-		for (var t in tokens) {
+		var ALLOWED_TOKENS = ["+","-","*","/","(",")","%+","%-"];
+		var fairmathedTokens = [];
+		var needsClosedBracket = false;
+		for (i=0;i<tokens.length;i++) {
+			var t = tokens[i];
+			if (t === "") {
+				continue;
+			}
 			if (ALLOWED_TOKENS.indexOf(t) == -1 && Number(t) == NaN) {
 				throw "Syntax Error: " + t + " not a number, operator or variable!";
 			}
+			console.log(t);
+			if (t == "%+" || t == "%-") {
+				fairmathedTokens.push(".fairAdd");
+				fairmathedTokens.push("(");
+				needsClosedBracket = true;
+			} else if (!isNaN(Number(t))) {
+				fairmathedTokens.push("Number("+t+")");
+				if (needsClosedBracket) {
+					fairmathedTokens.push(")");
+					needsClosedBracket = false;
+				}
+			} else {
+				fairmathedTokens.push(t);
+			}
 		}
-		return eval(tokens.join(""));
+		console.log(fairmathedTokens.join(""));
+		return eval(fairmathedTokens.join(""));
 	} else {
 		if (calc.match(/".*"/)) { // String
 			if (calc.match(/^"([^"]*\\"[^"]*)*"$/)) {
@@ -344,12 +369,12 @@ function renderDelegator(renderStack, html) {
 		node = renderStack.node.items[renderStack.pointer];
 	}
 	if (node.type == "COMMAND") {
-		if (node.command == "choice") {
+		if (node.command == "choice") { // *CHOICE
 			return renderCommandChoice(node, renderStack, html);
-		} else if (node.command == "finish") {
+		} else if (node.command == "finish") { // *FINISH
 			html += '<br><div><button onclick="finishButtonPressed()" name="finishbutton" type="button" class="btn btn-primary">Next Chapter</button></div>\n';
 			return [false, renderStack, html];
-		} else if (node.command == "create") {
+		} else if (node.command == "create") { // *FINISH
 			var cmdMatch = node.params.match("([^ \t]+) +(.+)");
 			if (!cmdMatch) {
 				throw "Line "+node.linenr+": Syntax Error: *create needs to have a variable name and a value!"
@@ -362,12 +387,12 @@ function renderDelegator(renderStack, html) {
 				globals[varname] = value;
 				console.log("Created variable "+varname+" with value "+value);
 			}
-		} else if (node.command == "set") {
+		} else if (node.command == "set") { // *SET
 			var cmdMatch = node.params.match("([^ \t]+) +(.+)");
 			if (!cmdMatch) {
 				throw "Line "+node.linenr+": Syntax Error: *set needs to have a variable name and a value!"
 			}
-			var varname = cmdMatch[1];
+			var varname = cmdMatch[1]; // TODO: Throw on illegal variable name
 			var value = cmdMatch[2];
 			if (!(varname in globals)) {
 				throw "Line "+node.linenr+": Runtime Error: no variable with name "+varname+" exists! Create it first using *create"
@@ -376,9 +401,9 @@ function renderDelegator(renderStack, html) {
 			}
 		}
 		// Todo: other commands
-	} else if (node.type == "CHOICETARGET") {
+	} else if (node.type == "CHOICETARGET") { // #CHOICETARGET
 		// Todo: handle error, should never happen!
-	} else if (node.type == "PLAINTEXT") {
+	} else if (node.type == "PLAINTEXT") { // PLAINTEXT
 		[keepRendering, renderStack] = incrementRenderStack(renderStack);
 		var text = node.text;
 		for (var v in globals) {
