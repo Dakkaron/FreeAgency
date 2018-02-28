@@ -1,7 +1,7 @@
-var sceneData = 'Das ist ein\n\
+﻿var sceneData = 'Das ist ein\n\
 Beispieltext\n\
 *create testvar "TEST"\n\
-*set testvar "Hallo"\n\
+*set testvar 7+3*4\n\
 *choice\n\
 	#Wahl 1\n\
 		${testvar}, du \n\
@@ -10,7 +10,47 @@ Beispieltext\n\
 		Das hier sollte nicht angezeigt werden\n\
 	#Wahl 2\n\
 		${testvar}, du hast Wahl 2 ausgewählt\n\
-		*finish\n';
+		*choice\n\
+			#Innere Wahl 1\n\
+				Innere Wahl 1 ausgewählt\n\
+				*finish\n\
+			#Innere Wahl 2\n\
+				Innere Wahl 2 ausgewählt\n\
+				*finish\n';
+
+/*sceneData = '*choice\n\
+  #Make pre-emptive war on the western lands.\n\
+    If you can seize their territory, your kingdom will flourish.  But your army\'s\n\
+    morale is low and the kingdom\'s armory is empty.  How will you win the war?\n\
+    *choice\n\
+      #Drive the peasants like slaves; if we work hard enough, we\'ll win.\n\
+        Unfortunately, morale doesn\'t work like that.  Your army soon turns against you\n\
+        and the kingdom falls to the western barbarians.\n\
+        *finish\n\
+      #Appoint charismatic knights and give them land, peasants, and resources.\n\
+        Your majesty\'s people are eminently resourceful.  Your knights win the day,\n\
+        but take care: they may soon demand a convention of parliament.\n\
+        *finish\n\
+      #Steal food and weapons from the enemy in the dead of night.\n\
+        A cunning plan.  Soon your army is a match for the westerners; they choose\n\
+        not to invade for now, but how long can your majesty postpone the inevitable?\n\
+        *finish\n\
+  #Beat swords to plowshares and trade food to the westerners for protection.\n\
+    The westerners have you at the point of a sword.  They demand unfair terms\n\
+    from you.\n\
+    *choice\n\
+      #Accept the terms for now.\n\
+        Eventually, the barbarian westerners conquer you anyway, destroying their\n\
+        bread basket, and the entire region starves.\n\
+        *finish\n\
+      #Threaten to salt our fields if they don\'t offer better terms.\n\
+        They blink.  Your majesty gets a fair price for wheat.\n\
+        *finish\n\
+  #Abdicate the throne. I have clearly mismanaged this kingdom!\n\
+    The kingdom descends into chaos, but you manage to escape with your own hide.\n\
+    Perhaps in time you can return to restore order to this fair land.\n\
+    *finish\n\
+';*/
 
 function tokenize(scene) {
 	var tokenList = [];
@@ -136,7 +176,7 @@ function parseTokens(tokenList) {
 }
 
 function printableParsedTree(node) {
-	if ((typeof node["parent"])==="undefined") {
+	if ((typeof node["parent"])==='undefined') {
 		return node;
 	}
 	var pnode = {
@@ -157,6 +197,79 @@ var choiceSelected = null;
 var renderStack = null;
 var renderedHtml = null;
 var globals = {};
+
+function parseCalc(varname, calc) {
+	function recursiveCalc(tokens, pos) {
+		if (typeof pos==='undefined') {
+			pos = 0;
+		}
+		tokens.shift();
+		for (;pos<tokens.length;pos++) {
+			if (tokens[i]==="(") {
+			}
+		}
+	}
+	var OPERATORS = ["+","-","*","/"];
+	var operator = null;
+	var isCalc = false;
+	var i;
+	for (operator in OPERATORS) {
+		if (calc.indexOf(operator)>-1) {
+			isCalc = true;
+			break
+		}
+	}
+	if (isCalc) {
+		calc = calc.replace(/[ \t]/g, "");
+		if (varname != null) {
+			for (operator in OPERATORS) {
+				if (calc.startsWith(operator)) {
+					calc = varname + operator + "(" + calc.substr(1) + ")";
+					break;
+				}
+			}
+		}
+		var tokens = ("("+calc+")").split(/([-+*\/()])/);
+		for (var v in globals) {
+			if (tokens.indexOf(v)>-1) {
+				if (typeof(globals[v])!=='number') {
+					throw "Syntax Error: variable "+v+" is not a number!";
+				} else {
+					for (i=0;i<tokens.length;i++) {
+						if (tokens[i]===v) {
+							tokens[i] = globals[v];
+						}
+					}
+				}
+			}
+		}
+		//var result = recursiveCalc(tokens); // Todo: own math implementation
+		var ALLOWED_TOKENS = ["+","-","*","/","(",")"];
+		for (var t in tokens) {
+			if (ALLOWED_TOKENS.indexOf(t) == -1 && Number(t) == NaN) {
+				throw "Syntax Error: " + t + " not a number, operator or variable!";
+			}
+		}
+		return eval(tokens.join(""));
+	} else {
+		if (calc.match(/".*"/)) { // String
+			if (calc.match(/^"([^"]*\\"[^"]*)*"$/)) {
+				throw "Syntax Error: String value "+calc+" contains unescaped quotation marks!"
+			}
+			return calc.substr(1,calc.length-2).replace(/\\"/g,'"');
+		} else if (Number(calc)!==NaN) {
+			return calc;
+		} else if (calc==="true") {
+			return true;
+		} else if (calc==="false") {
+			return false;
+		} else if (typeof globals[calc] !== 'undefined') {
+			return globals[calc];
+		}
+	}
+}
+
+
 function choiceNextButtonPressed() {
 	choiceSelected = $('input[name=choiceRadio]:checked', '#choiceform').val();
 	[renderStack, renderedHtml] = render(renderStack)
@@ -191,6 +304,7 @@ function renderCommandChoice(node, renderStack, html) {
 			}
 			// Todo: handle ifs
 		});
+		choiceSelected = null;
 		if (selectedChoice !== null) {
 			renderStack = {"node":selectedChoice, "pointer":0, "parent":renderStack};
 			[renderStack, html] = render(renderStack);
@@ -258,7 +372,7 @@ function renderDelegator(renderStack, html) {
 			if (!(varname in globals)) {
 				throw "Line "+node.linenr+": Runtime Error: no variable with name "+varname+" exists! Create it first using *create"
 			} else {
-				globals[varname] = value;
+				globals[varname] = parseCalc(varname, value);
 			}
 		}
 		// Todo: other commands
