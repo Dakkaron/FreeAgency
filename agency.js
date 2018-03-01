@@ -431,10 +431,20 @@ function renderDelegator(renderStack, html) {
 			if (!(varname in globals)) {
 				throw "Line "+node.linenr+": Runtime Error: no variable with name "+varname+" exists! Create it first using *create"
 			} else {
-				globals[varname] = parseCalc(varname, value);
+				try {
+					globals[varname] = parseCalc(varname, value);
+				} catch (e) {
+					throw "Line "+node.linenr+": "+e;
+				}
 			}
 		} else if (node.command === "if") {
-			if (parseCalc(none, node.params.trim())) {
+			var calcResult = null;
+			try {
+				calcResult = parseCalc(none, node.params.trim());
+			} catch (e) {
+				throw "Line "+node.linenr+": "+e;
+			}
+			if (calcResult) {
 				renderStack = {"node":node.items[0], "pointer":0, "parent":renderStack};
 			} else {
 				incrementRenderStack(renderStack);
