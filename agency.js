@@ -2,6 +2,14 @@
 Beispieltext\n\
 *create testvar "TEST"\n\
 *set testvar 1 + 2 > 1 and false\n\
+*if testvar\n\
+	Testvar ist TRUE\n\
+*else\n\
+	Testvar ist nicht TRUE\n\
+*if not testvar\n\
+	Testvar ist FALSE\n\
+*else\n\
+	Testvar ist nicht FALSE\n\
 *choice\n\
 	#Wahl 1\n\
 		${testvar}, du \n\
@@ -184,11 +192,13 @@ function parseTokens(tokenList) {
 			}
 			currentIndent = element.indent;
 		}
-		if (element.type == "PLAINTEXT") {
+		if (element.type === "PLAINTEXT") {
 			currentParseLevel.items.push(element);
-		} else if (element.type == "COMMAND") {
-			if (element.command == "choice") {
+		} else if (element.type === "COMMAND") {
+			if (element.command === "choice") {
 				element.choiceCount = 0;
+				addParseLevel(element);
+			} else if (element.command === "if" || element.command === "elseif" || element.command === "else") {
 				addParseLevel(element);
 			} else {
 				currentParseLevel.items.push(element);
@@ -237,11 +247,12 @@ function parseCalc(varname, calc) {
 			}
 		}
 	}
-	var OPERATORS = ["+","-","*","/"];
+	var BINARY_OPERATORS = ["+","-","*","/","%+","%-","and","or","<","<=",">",">=","=","!="];
+	var ALLOWED_TOKENS = ["+","-","*","/","(",")","%+","%-","and","or","not","<","<=",">",">=","=","!="];
 	var operator = null;
 	var isCalc = false;
 	var i;
-	OPERATORS.forEach((operator, i, array) => {
+	ALLOWED_TOKENS.forEach((operator, i, array) => {
 		if (!isCalc && calc.indexOf(operator)>-1) {
 			isCalc = true;
 		}
@@ -249,32 +260,27 @@ function parseCalc(varname, calc) {
 	if (isCalc) {
 		calc = calc.trim();
 		if (varname != null) {
-			OPERATORS.forEach((operator, i, array) => {
+			BINARY_OPERATORS.forEach((operator, i, array) => {
 				if (calc.startsWith(operator)) {
 					calc = varname + operator + "(" + calc.substr(1) + ")";
 				}
 			});
 		}
-		var tokens = ("("+calc+")").split(/([-+*\/()]|(?:%[-+])|and|or|(?:[<>]=?)|!?=)/);
+		var tokens = ("("+calc+")").split(/([-+*\/()]|(?:%[-+])|and|or|not|(?:[<>]=?)|!?=)/).map((v) => {return v.trim()});
 		for (var v in globals) {
 			if (tokens.indexOf(v)>-1) {
-				if (typeof(globals[v])!=='number') {
-					throw "Syntax Error: variable "+v+" is not a number!";
-				} else {
-					for (i=0;i<tokens.length;i++) {
-						if (tokens[i]===v) {
-							tokens[i] = globals[v];
-						}
+				for (i=0;i<tokens.length;i++) {
+					if (tokens[i]===v) {
+						tokens[i] = String(globals[v]);
 					}
 				}
 			}
 		}
 		//var result = recursiveCalc(tokens); // Todo: own math implementation
-		var ALLOWED_TOKENS = ["+","-","*","/","(",")","%+","%-","and","or","<","<=",">",">=","=","!="];
 		var fairmathedTokens = [];
 		var needsClosedBracket = false;
 		for (i=0;i<tokens.length;i++) {
-			var t = tokens[i].trim();
+			var t = tokens[i];
 			if (t === "") {
 				continue;
 			}
@@ -289,6 +295,8 @@ function parseCalc(varname, calc) {
 				fairmathedTokens.push("||");
 			} else if (t === "and") {
 				fairmathedTokens.push("&&");
+			} else if (t === "not") {
+				fairmathedTokens.push("!");
 			} else if (t === "=") {
 				fairmathedTokens.push("==");
 			} else if (t === "<" || t === ">" || t === "<=" || t === ">=" || t === "!=") {
@@ -339,6 +347,57 @@ function finishButtonPressed() {
 	//Todo: next chapter
 }
 
+function renderCommandIf(node, renderStack, html) {
+	if (node.command === "if") {
+		var calcResult = null;
+		try {
+			calcResult = parseCalc(null, node.params.trim());
+		} catch (e) {
+			throw "Line "+node.linenr+": "+e;
+		}
+		if (calcResult) {
+			renderStack = {"node":node, "pointer":0, "parent":renderStack, "outstandingIf":false};
+			return [true, renderStack, html];
+		} else {
+			renderStack["outstandingIf"] = true;
+			[keepRendering, renderStack] = incrementRenderStack(renderStack);
+			return [keepRendering, renderStack, html];
+			// Todo: elseif and else
+		}
+	} else if (node.command === "elseif") {
+		if (renderStack["outstandingIf"]) {
+			var calcResult = null;
+			try {
+				calcResult = parseCalc(null, node.params.trim());
+			} catch (e) {
+				throw "Line "+node.linenr+": "+e;
+			}
+			if (calcResult) {
+				renderStack["outstandingIf"] = false;
+				renderStack = {"node":node, "pointer":0, "parent":renderStack, "outstandingIf":false};
+				return [true, renderStack, html];
+			} else {
+				renderStack["outstandingIf"] = true;
+				[keepRendering, renderStack] = incrementRenderStack(renderStack);
+				return [keepRendering, renderStack, html];
+				// Todo: elseif and else
+			}
+		} else {
+			[keepRendering, renderStack] = incrementRenderStack(renderStack);
+			return [keepRendering, renderStack, html];
+		}
+	} else if (node.command === "else") {
+		if (renderStack["outstandingIf"]) {
+			renderStack["outstandingIf"] = false;
+			renderStack = {"node":node, "pointer":0, "parent":renderStack, "outstandingIf":false};
+			return [true, renderStack, html];
+		} else {
+			[keepRendering, renderStack] = incrementRenderStack(renderStack);
+			return [keepRendering, renderStack, html];
+		}
+	}
+}
+
 function renderCommandChoice(node, renderStack, html) {
 	var newHtml = "";
 	if (choiceSelected == null) { // render options
@@ -365,7 +424,7 @@ function renderCommandChoice(node, renderStack, html) {
 		});
 		choiceSelected = null;
 		if (selectedChoice !== null) {
-			renderStack = {"node":selectedChoice, "pointer":0, "parent":renderStack};
+			renderStack = {"node":selectedChoice, "pointer":0, "parent":renderStack,"outstandingIf":false};
 			[renderStack, html] = render(renderStack);
 			return [false, renderStack, html];
 		} else {
@@ -437,19 +496,8 @@ function renderDelegator(renderStack, html) {
 					throw "Line "+node.linenr+": "+e;
 				}
 			}
-		} else if (node.command === "if") {
-			var calcResult = null;
-			try {
-				calcResult = parseCalc(none, node.params.trim());
-			} catch (e) {
-				throw "Line "+node.linenr+": "+e;
-			}
-			if (calcResult) {
-				renderStack = {"node":node.items[0], "pointer":0, "parent":renderStack};
-			} else {
-				incrementRenderStack(renderStack);
-				// Todo: elseif and else
-			}
+		} else if (node.command === "if" || node.command === "elseif" || node.command === "else") {
+			return renderCommandIf(node, renderStack, html);
 		}
 		// Todo: other commands
 	} else if (node.type == "CHOICETARGET") { // #CHOICETARGET
@@ -479,7 +527,7 @@ $("#sourceCodeDiv").html(sceneData.replace(/\n/g,"<br>\n").replace(/\t/g,"\xa0".
 var tokenList = tokenize(sceneData);
 $("#tokenListDiv").html(prettyPrintTokens(tokenList).join("<br><br>"));
 var parsedTree = parseTokens(tokenList);
-renderStack = {"node":parsedTree,"pointer":0,"parent":null};
+renderStack = {"node":parsedTree,"pointer":0,"parent":null,outstandingIf:false};
 $("#parsedTreeDiv").html(JSON.stringify(printableParsedTree(parsedTree), null, 4));
 [renderStack, renderedHtml] = render(renderStack)
 $("#renderedOutputDiv").html(renderedHtml);
