@@ -224,7 +224,7 @@ function parseCalc(varname, calc) {
 		}
 	}
 	if (isCalc) {
-		calc = calc.replace(/[ \t]/g, "");
+		calc = calc.trim();
 		if (varname != null) {
 			for (operator in OPERATORS) {
 				if (calc.startsWith(operator)) {
@@ -233,7 +233,7 @@ function parseCalc(varname, calc) {
 				}
 			}
 		}
-		var tokens = ("("+calc+")").split(/([-+*\/()]|(?:%[-+]))/);
+		var tokens = ("("+calc+")").split(/([-+*\/()]|(?:%[-+])|and|or|(?:[<>]=?)|!?=)/);
 		for (var v in globals) {
 			if (tokens.indexOf(v)>-1) {
 				if (typeof(globals[v])!=='number') {
@@ -248,11 +248,11 @@ function parseCalc(varname, calc) {
 			}
 		}
 		//var result = recursiveCalc(tokens); // Todo: own math implementation
-		var ALLOWED_TOKENS = ["+","-","*","/","(",")","%+","%-"];
+		var ALLOWED_TOKENS = ["+","-","*","/","(",")","%+","%-","and","or","<","<=",">",">=","=","!="];
 		var fairmathedTokens = [];
 		var needsClosedBracket = false;
 		for (i=0;i<tokens.length;i++) {
-			var t = tokens[i];
+			var t = tokens[i].trim();
 			if (t === "") {
 				continue;
 			}
@@ -264,6 +264,21 @@ function parseCalc(varname, calc) {
 				fairmathedTokens.push(".fairAdd");
 				fairmathedTokens.push("(");
 				needsClosedBracket = true;
+			} else if (t === "true" || t === "false") {
+				fairmathedTokens.push(t);
+			} else if (t === "or") {
+				fairmathedTokens.push("||");
+			} else if (t === "and") {
+				fairmathedTokens.push("&&");
+			} else if (t === "=") {
+				fairmathedTokens.push("==");
+			} else if (t === "<" || t === ">" || t === "<=" || t === ">=" || t === "!=") {
+				fairmathedTokens.push(t);
+			} else if (t === "(") {
+				if (fairmathedTokens.length>0 && (ALLOWED_TOKENS.indexOf(fairmathedTokens[fairmathedTokens.length-1])===-1 || tokens[fairmathedTokens.length-1]===")")) {
+					throw "Syntax Error: "+t+" cannot be preceded by "+fairmathedTokens[fairmathedTokens.length-1]+".";
+				}
+				fairmathedTokens.push(t);
 			} else if (!isNaN(Number(t))) {
 				fairmathedTokens.push("Number("+t+")");
 				if (needsClosedBracket) {
@@ -368,13 +383,13 @@ function renderDelegator(renderStack, html) {
 	} else {
 		node = renderStack.node.items[renderStack.pointer];
 	}
-	if (node.type == "COMMAND") {
-		if (node.command == "choice") { // *CHOICE
+	if (node.type === "COMMAND") {
+		if (node.command === "choice") { // *CHOICE
 			return renderCommandChoice(node, renderStack, html);
-		} else if (node.command == "finish") { // *FINISH
+		} else if (node.command === "finish") { // *FINISH
 			html += '<br><div><button onclick="finishButtonPressed()" name="finishbutton" type="button" class="btn btn-primary">Next Chapter</button></div>\n';
 			return [false, renderStack, html];
-		} else if (node.command == "create") { // *FINISH
+		} else if (node.command === "create") { // *FINISH
 			var cmdMatch = node.params.match("([^ \t]+) +(.+)");
 			if (!cmdMatch) {
 				throw "Line "+node.linenr+": Syntax Error: *create needs to have a variable name and a value!"
@@ -387,7 +402,7 @@ function renderDelegator(renderStack, html) {
 				globals[varname] = value;
 				console.log("Created variable "+varname+" with value "+value);
 			}
-		} else if (node.command == "set") { // *SET
+		} else if (node.command === "set") { // *SET
 			var cmdMatch = node.params.match("([^ \t]+) +(.+)");
 			if (!cmdMatch) {
 				throw "Line "+node.linenr+": Syntax Error: *set needs to have a variable name and a value!"
@@ -398,6 +413,13 @@ function renderDelegator(renderStack, html) {
 				throw "Line "+node.linenr+": Runtime Error: no variable with name "+varname+" exists! Create it first using *create"
 			} else {
 				globals[varname] = parseCalc(varname, value);
+			}
+		} else if (node.command === "if") {
+			if (parseCalc(none, node.params.trim())) {
+				renderStack = {"node":node.items[0], "pointer":0, "parent":renderStack};
+			} else {
+				incrementRenderStack(renderStack);
+				// Todo: elseif and else
 			}
 		}
 		// Todo: other commands
