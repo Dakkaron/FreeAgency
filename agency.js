@@ -1,7 +1,7 @@
 ﻿var sceneData = 'Das ist ein\n\
 Beispieltext\n\
 *create testvar "TEST"\n\
-*set testvar 50 %+ 20\n\
+*set testvar 1 + 2 > 1 and false\n\
 *choice\n\
 	#Wahl 1\n\
 		${testvar}, du \n\
@@ -53,8 +53,32 @@ Beispieltext\n\
 ';*/
 
 //Fairmath polyfills
-Number.prototype.fairAdd = function(val) {return this + (100-this)*(val/100);};
-Number.prototype.fairSub = function(val) {return this - this*(val/100);};
+Number.prototype.fairAdd = function(val) {val=Number(val);return this + (100-this)*(val/100);};
+Number.prototype.fairSub = function(val) {val=Number(val);return this - this*(val/100);};
+String.prototype.fairAdd = function(val) {
+	nthis = Number(val);
+	if (isNaN(nthis)) {
+		throw "Runtime Error: "+nthis+" is no number!"
+	}
+	nval = Number(val);
+	if (isNaN(nval)) {
+		throw "Runtime Error: "+val+" is no number!"
+	}
+	return this + (100-this)*(nval/100);
+};
+String.prototype.fairSub = function(val) {
+	nthis = Number(val);
+	if (isNaN(nthis)) {
+		throw "Runtime Error: "+nthis+" is no number!"
+	}
+	nval = Number(val);
+	if (isNaN(nval)) {
+		throw "Runtime Error: "+val+" is no number!"
+	}
+	return this - this*(nval/100);
+};
+Boolean.prototype.fairAdd = function(val) {val=Number(val);return this + (100-this)*(val/100);};
+Boolean.prototype.fairSub = function(val) {val=Number(val);return this - this*(val/100);};
 
 function tokenize(scene) {
 	var tokenList = [];
@@ -217,16 +241,18 @@ function parseCalc(varname, calc) {
 	var operator = null;
 	var isCalc = false;
 	var i;
-	for (operator in OPERATORS) {
+	for (i in OPERATORS) {
+		operator = OPERATORS[i];
 		if (calc.indexOf(operator)>-1) {
 			isCalc = true;
-			break
+			break;
 		}
 	}
 	if (isCalc) {
 		calc = calc.trim();
 		if (varname != null) {
-			for (operator in OPERATORS) {
+			for (i in OPERATORS) {
+				operator = OPERATORS[i];
 				if (calc.startsWith(operator)) {
 					calc = varname + operator + "(" + calc.substr(1) + ")";
 					break;
@@ -279,7 +305,7 @@ function parseCalc(varname, calc) {
 					throw "Syntax Error: "+t+" cannot be preceded by "+fairmathedTokens[fairmathedTokens.length-1]+".";
 				}
 				fairmathedTokens.push(t);
-			} else if (!isNaN(Number(t))) {
+			} else if (t.match(/^(?:\d+(?:[.]\d*)?)|[.]\d+$/)) {
 				fairmathedTokens.push("Number("+t+")");
 				if (needsClosedBracket) {
 					fairmathedTokens.push(")");
