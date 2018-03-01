@@ -241,23 +241,19 @@ function parseCalc(varname, calc) {
 	var operator = null;
 	var isCalc = false;
 	var i;
-	for (i in OPERATORS) {
-		operator = OPERATORS[i];
-		if (calc.indexOf(operator)>-1) {
+	OPERATORS.forEach((operator, i, array) => {
+		if (!isCalc && calc.indexOf(operator)>-1) {
 			isCalc = true;
-			break;
 		}
-	}
+	});
 	if (isCalc) {
 		calc = calc.trim();
 		if (varname != null) {
-			for (i in OPERATORS) {
-				operator = OPERATORS[i];
+			OPERATORS.forEach((operator, i, array) => {
 				if (calc.startsWith(operator)) {
 					calc = varname + operator + "(" + calc.substr(1) + ")";
-					break;
 				}
-			}
+			});
 		}
 		var tokens = ("("+calc+")").split(/([-+*\/()]|(?:%[-+])|and|or|(?:[<>]=?)|!?=)/);
 		for (var v in globals) {
@@ -282,9 +278,6 @@ function parseCalc(varname, calc) {
 			if (t === "") {
 				continue;
 			}
-			if (ALLOWED_TOKENS.indexOf(t) == -1 && Number(t) == NaN) {
-				throw "Syntax Error: " + t + " not a number, operator or variable!";
-			}
 			console.log(t);
 			if (t == "%+" || t == "%-") {
 				fairmathedTokens.push(".fairAdd");
@@ -306,7 +299,7 @@ function parseCalc(varname, calc) {
 				}
 				fairmathedTokens.push(t);
 			} else if (t.match(/^(?:\d+(?:[.]\d*)?)|[.]\d+$/)) {
-				fairmathedTokens.push("Number("+t+")");
+				fairmathedTokens.push("("+t+")");
 				if (needsClosedBracket) {
 					fairmathedTokens.push(")");
 					needsClosedBracket = false;
@@ -323,7 +316,7 @@ function parseCalc(varname, calc) {
 				throw "Syntax Error: String value "+calc+" contains unescaped quotation marks!"
 			}
 			return calc.substr(1,calc.length-2).replace(/\\"/g,'"');
-		} else if (Number(calc)!==NaN) {
+		} else if (!isNaN(Number(calc))) {
 			return calc;
 		} else if (calc==="true") {
 			return true;
