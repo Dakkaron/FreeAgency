@@ -467,7 +467,7 @@ function renderDelegator(renderStack, html) {
 		} else if (node.command === "finish") { // *FINISH
 			html += '<br><div><button onclick="finishButtonPressed()" name="finishbutton" type="button" class="btn btn-primary">Next Chapter</button></div>\n';
 			return [false, renderStack, html];
-		} else if (node.command === "create") { // *FINISH
+		} else if (node.command === "create") { // *CREATE
 			var cmdMatch = node.params.match("([^ \t]+) +(.+)");
 			if (!cmdMatch) {
 				throw "Line "+node.linenr+": Syntax Error: *create needs to have a variable name and a value!"
@@ -496,7 +496,7 @@ function renderDelegator(renderStack, html) {
 					throw "Line "+node.linenr+": "+e;
 				}
 			}
-		} else if (node.command === "if" || node.command === "elseif" || node.command === "else") {
+		} else if (node.command === "if" || node.command === "elseif" || node.command === "else") { // *if, *elseif, *else
 			return renderCommandIf(node, renderStack, html);
 		}
 		// Todo: other commands
