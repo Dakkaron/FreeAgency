@@ -1,4 +1,7 @@
-﻿var sceneData = 'Das ist ein\n\
+﻿var currentSceneId = 0;
+var sceneNamesList = ["Testszene1", "Testszene2"];
+var sceneDataMap = {
+"Testszene1":  'Das ist ein\n\
 Beispieltext\n\
 *create testvar "TEST"\n\
 *set testvar 1 + 2 > 1 and false\n\
@@ -24,7 +27,12 @@ Beispieltext\n\
 				*finish\n\
 			#Innere Wahl 2\n\
 				Innere Wahl 2 ausgewählt\n\
-				*finish\n';
+				*finish\n',
+"Testszene2" : 'Szene 2\n\
+*finish\n'
+};
+
+
 
 /*sceneData = '*choice\n\
   #Make pre-emptive war on the western lands.\n\
@@ -233,7 +241,7 @@ function printableParsedTree(node) {
 
 var choiceSelected = null;
 var renderStack = null;
-var renderedHtml = null;
+var endingCommandUsed = false;
 var globals = {};
 
 function parseCalc(varname, calc) {
@@ -344,7 +352,11 @@ function choiceNextButtonPressed() {
 }
 
 function finishButtonPressed() {
-	//Todo: next chapter
+	if (++currentSceneId >= sceneNamesList.length || endingCommandUsed) {
+		currentSceneId = 0;
+		doScene(sceneDataMap[sceneNamesList[currentSceneId]], true);
+	}
+	doScene(sceneDataMap[sceneNamesList[currentSceneId]], false);
 }
 
 function renderCommandIf(node, renderStack, html) {
@@ -465,7 +477,15 @@ function renderDelegator(renderStack, html) {
 		if (node.command === "choice") { // *CHOICE
 			return renderCommandChoice(node, renderStack, html);
 		} else if (node.command === "finish") { // *FINISH
-			html += '<br><div><button onclick="finishButtonPressed()" name="finishbutton" type="button" class="btn btn-primary">Next Chapter</button></div>\n';
+			if (currentSceneId + 1 < sceneNamesList.length) { // Next chapter
+				html += '<br><div><button onclick="finishButtonPressed()" name="finishbutton" type="button" class="btn btn-primary">Next Chapter</button></div>\n';
+			} else { // Play Again
+				html += '<br><div><button onclick="finishButtonPressed()" name="finishbutton" type="button" class="btn btn-primary">Play Again</button></div>\n';
+			}
+			return [false, renderStack, html];
+		} else if (node.command === "ending") { // *ENDING
+			html += '<br><div><button onclick="finishButtonPressed()" name="finishbutton" type="button" class="btn btn-primary">Play Again</button></div>\n';
+			endingCommandUsed = true;
 			return [false, renderStack, html];
 		} else if (node.command === "create") { // *CREATE
 			var cmdMatch = node.params.match("([^ \t]+) +(.+)");
@@ -523,11 +543,22 @@ function render(renderStack) {
 	return [renderStack, html];
 }
 
-$("#sourceCodeDiv").html(sceneData.replace(/\n/g,"<br>\n").replace(/\t/g,"\xa0".repeat(8)));
-var tokenList = tokenize(sceneData);
-$("#tokenListDiv").html(prettyPrintTokens(tokenList).join("<br><br>"));
-var parsedTree = parseTokens(tokenList);
-renderStack = {"node":parsedTree,"pointer":0,"parent":null,outstandingIf:false};
-$("#parsedTreeDiv").html(JSON.stringify(printableParsedTree(parsedTree), null, 4));
-[renderStack, renderedHtml] = render(renderStack)
-$("#renderedOutputDiv").html(renderedHtml);
+function doScene(sceneData, resetGlobal) {
+	if (resetGlobal) {
+		globals = {};
+	}
+	choiceSelected = null;
+	renderStack = null;
+	endingCommandUsed = false;
+	var renderedHtml = null;
+	$("#sourceCodeDiv").html(sceneData.replace(/\n/g,"<br>\n").replace(/\t/g,"\xa0".repeat(8)));
+	var tokenList = tokenize(sceneData);
+	$("#tokenListDiv").html(prettyPrintTokens(tokenList).join("<br><br>"));
+	var parsedTree = parseTokens(tokenList);
+	renderStack = {"node":parsedTree,"pointer":0,"parent":null,outstandingIf:false};
+	$("#parsedTreeDiv").html(JSON.stringify(printableParsedTree(parsedTree), null, 4));
+	[renderStack, renderedHtml] = render(renderStack)
+	$("#renderedOutputDiv").html(renderedHtml);
+}
+
+doScene(sceneDataMap[sceneNamesList[currentSceneId]], true);
