@@ -27,7 +27,10 @@ Beispieltext\n\
 				*finish\n\
 			#Innere Wahl 2\n\
 				Innere Wahl 2 ausgewählt\n\
-				*finish\n',
+				*finish\n\
+	#Spiel beenden\n\
+		Spiel beendet!\n\
+		*ending\n',
 "Testszene2" : 'Szene 2\n\
 *finish\n'
 };
@@ -355,8 +358,9 @@ function finishButtonPressed() {
 	if (++currentSceneId >= sceneNamesList.length || endingCommandUsed) {
 		currentSceneId = 0;
 		doScene(sceneDataMap[sceneNamesList[currentSceneId]], true);
+	} else {
+		doScene(sceneDataMap[sceneNamesList[currentSceneId]], false);
 	}
-	doScene(sceneDataMap[sceneNamesList[currentSceneId]], false);
 }
 
 function renderCommandIf(node, renderStack, html) {
